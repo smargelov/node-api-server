@@ -1,8 +1,7 @@
 const bcrypt = require('bcryptjs')
-const {validationResult} = require('express-validator')
 const jwt = require('jsonwebtoken')
-const User = require('../models/User.js')
-const Role = require('../models/Role.js')
+const {validationResult} = require('express-validator')
+const authService = require('../services/authService.js')
 
 /**
  * Generate a JWT token for the user
@@ -14,7 +13,7 @@ const generateAccessToken = (id, roles) => {
     return jwt.sign({id, roles}, process.env.ACCESS_TOKEN_SECRET, {expiresIn: '24h'})
 }
 
-class authController {
+class AuthController {
     async registration(req, res) {
         try {
             const errors = validationResult(req)
@@ -22,15 +21,12 @@ class authController {
                 return res.status(400).json({message: 'Registration error', errors: errors.array()})
             }
             const {username, password} = req.body
-            const candidate = await User.findOne({username})
+            const candidate = await authService.isUserAlreadyExist(username)
             if (candidate) {
-                res.status(400).json({message: 'Such a user already exists'})
+                return res.status(400).json({message: 'Such a user already exists'})
             }
-            const hashedPassword = await bcrypt.hash(password, 7)
-            const userRole = await Role.findOne({value: 'USER'})
-            const user = new User({username, password: hashedPassword, roles: [userRole.value]})
-            await user.save()
-            return res.json({message: 'User created'})
+            const user = await authService.addUserToDb(username, password, 'USER')
+            return res.json({message: 'User created', user})
         } catch (e) {
             console.log(e)
             res.status(400).json({message: 'Registration error'})
@@ -40,7 +36,7 @@ class authController {
     async login(req, res) {
         try {
             const {username, password} = req.body
-            const user = await User.findOne({username})
+            const user = await authService.isUserAlreadyExist(username)
             if (!user) {
                 return res.status(400).json({message: `User ${username} not found`})
             }
@@ -58,7 +54,7 @@ class authController {
 
     async getUsers(req, res) {
         try {
-            const users = await User.find({})
+            const users = await authService.getUsersFromDb()
             return res.json(users)
         } catch (e) {
             console.log(e)
@@ -68,4 +64,4 @@ class authController {
 
 }
 
-module.exports = new authController()
+module.exports = new AuthController()
